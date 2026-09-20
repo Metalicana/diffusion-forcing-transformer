@@ -21,11 +21,11 @@ Existing MemCam/VBench environments are not modified. Override `DFOT_ENV_PREFIX`
 with an absolute path for another dedicated DFoT environment. An existing prefix
 is reused and its packages are updated by this command.
 
-The bootstrap uses the official PyTorch 2.5.1/torchvision 0.20.1 CUDA 12.4 wheels:
-https://pytorch.org/get-started/previous-versions/#v251
+The bootstrap uses the official PyTorch 2.7.1/torchvision 0.22.1 CUDA 12.8 wheels:
+https://pytorch.org/get-started/previous-versions/#v271
 This is a conservative starting environment, not a locally GPU-tested lockfile;
 the cluster smoke establishes compatibility with the installed GPU and driver.
-A newer GPU architecture may require a newer matching PyTorch/torchvision build.
+This build includes Blackwell support for the observed RTX PRO 6000 (sm_120).
 The resolved packages and smoke report are saved in `outputs/dfot_environment/`.
 
 To repeat only the environment smoke:

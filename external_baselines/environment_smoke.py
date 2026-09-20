@@ -36,6 +36,9 @@ def main():
             raise RuntimeError('CUDA unavailable: check GPU allocation, visibility and driver compatibility')
         report['gpu'] = torch.cuda.get_device_name(0)
         report['cuda_runtime'] = torch.version.cuda
+        report['compute_capability'] = list(torch.cuda.get_device_capability(0))
+        report['compiled_architectures'] = torch.cuda.get_arch_list()
+        print(f"CUDA runtime: {report['cuda_runtime']}; capability: {report['compute_capability']}; compiled: {report['compiled_architectures']}", flush=True)
         print(f"Testing CUDA kernels on {report['gpu']} ...", flush=True)
         with torch.inference_mode():
             x = torch.randn(256, 256, device='cuda')

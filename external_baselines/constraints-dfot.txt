@@ -2,8 +2,8 @@
 # This is a bootstrap constraint set, not a fully resolved environment lock.
 # TorchMetrics 0.11.4 imports pkg_resources (removed in setuptools 82).
 setuptools==80.9.0
-torch==2.5.1
-torchvision==0.20.1
+torch==2.7.1
+torchvision==0.22.1
 numpy==1.26.4
 lightning==2.4.0
 pytorch-lightning==2.4.0
