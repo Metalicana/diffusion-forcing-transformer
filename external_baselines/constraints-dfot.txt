@@ -1,0 +1,11 @@
+# Conservative compatibility bounds for this 2025 upstream checkout.
+# This is a bootstrap constraint set, not a fully resolved environment lock.
+torch==2.5.1
+torchvision==0.20.1
+numpy==1.26.4
+lightning==2.4.0
+pytorch-lightning==2.4.0
+transformers>=4.44,<4.50
+diffusers>=0.30,<0.33
+moviepy<2
+opencv-python<4.12

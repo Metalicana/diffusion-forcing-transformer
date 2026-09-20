@@ -5,6 +5,38 @@ budget sweeps, or 60-second suite. The default is the official pose-conditioned
 **DFoT_RE10K** model evaluated on the exact 15-row, nominal 180-second manifest.
 This is a cross-domain pretrained baseline, not the internally trained CaM baseline.
 
+## Create the DFoT environment first
+
+After pulling these files on the cluster, run on an allocated GPU:
+
+```bash
+bash external_baselines/setup_dfot.sh 0
+```
+
+This creates `$HOME/.conda/envs/dfot` with Python 3.10 and ffmpeg, installs
+upstream requirements under compatibility constraints, runs `pip check`, then
+checks actual DFoT imports, CUDA matrix/NMS kernels, MP4 encode/decode and the
+contract tests. It needs no `study.json`, dataset, checkpoint or calibration.
+Existing MemCam/VBench environments are not modified. Override `DFOT_ENV_PREFIX`
+with an absolute path for another dedicated DFoT environment. An existing prefix
+is reused and its packages are updated by this command.
+
+The bootstrap uses the official PyTorch 2.5.1/torchvision 0.20.1 CUDA 12.4 wheels:
+https://pytorch.org/get-started/previous-versions/#v251
+This is a conservative starting environment, not a locally GPU-tested lockfile;
+the cluster smoke establishes compatibility with the installed GPU and driver.
+A newer GPU architecture may require a newer matching PyTorch/torchvision build.
+The resolved packages and smoke report are saved in `outputs/dfot_environment/`.
+
+To repeat only the environment smoke:
+
+```bash
+export PATH="$HOME/.conda/envs/dfot/bin:$PATH"
+"$HOME/.conda/envs/dfot/bin/python" -u -m external_baselines.environment_smoke --gpu 0
+```
+
+Only after that passes, configure the manifest-driven generation smoke below.
+
 ## Configure once on the cluster
 
 Copy `external_baselines/config.example.json` to your own JSON config. Set:
