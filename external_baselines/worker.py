@@ -11,6 +11,23 @@ import time
 from external_baselines.common import save, digest
 
 
+def load_dfot_checkpoint(model, checkpoint):
+    # Match upstream Lightning loading: restore config-derived buffers via its
+    # hook, then strictly load tensors. Do not hide absent learned parameters.
+    checkpoint['state_dict'] = {
+        k.replace('diffusion_model._orig_mod.', 'diffusion_model.'): v
+        for k, v in checkpoint['state_dict'].items()}
+    expected = model.state_dict()
+    unexpected = [k for k in checkpoint['state_dict']
+                  if model._should_include_in_checkpoint(k) and k not in expected]
+    if unexpected:
+        raise ValueError(f'Unexpected learned checkpoint keys: {unexpected}')
+    if not model.cfg.checkpoint.strict:
+        raise ValueError('External baseline requires strict checkpoint loading')
+    model.on_load_checkpoint(checkpoint)
+    model.load_state_dict(checkpoint['state_dict'], strict=True)
+
+
 def dfot(job, torch):
     import numpy as np
     from PIL import Image
@@ -38,10 +55,9 @@ def dfot(job, torch):
     print('Constructing DFoT and loading checkpoint', flush=True)
     model = DFoTVideoPose(cfg.algorithm)
     checkpoint = torch.load(job['model']['checkpoint'], map_location='cpu', weights_only=False)
-    state = {k.replace('diffusion_model._orig_mod.', 'diffusion_model.'): v
-             for k, v in checkpoint['state_dict'].items()}
-    model.load_state_dict(state, strict=True)
-    del checkpoint, state
+    load_dfot_checkpoint(model, checkpoint)
+    print('Checkpoint loaded with strict model weights and upstream config buffers', flush=True)
+    del checkpoint
     model.eval().to('cuda')
     if model.is_latent_diffusion:
         raise ValueError('This adapter targets the official pixel-space DFoT_RE10K checkpoint')
