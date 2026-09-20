@@ -181,7 +181,17 @@ def main():
                 raise FileNotFoundError(model['python'])
             if name == 'dfot':
                 if not model.get('intrinsics') or not model.get('intrinsics_source'):
-                    raise ValueError('Set verified normalized intrinsics AND intrinsics_source in config')
+                    raise ValueError('Set normalized intrinsics AND intrinsics_source in config')
+                if model.get('intrinsics_status') == 'nominal_published_fov_smoke_only':
+                    if args.phase == 'run':
+                        raise ValueError('This nominal config is smoke-only; review calibration/alignment before a full study')
+                    print('NOMINAL camera intrinsics: published FOV with documented assumptions', flush=True)
+                    from PIL import Image
+                    from external_baselines.camera import nominal_intrinsics
+                    for row in rows:
+                        with Image.open(row['input_image']) as image:
+                            if nominal_intrinsics(*image.size)['normalized'] != model['intrinsics']:
+                                raise ValueError('Image geometry changed since nominal config preparation')
                 model_hashes[name] = digest(model['checkpoint'])
                 from external_baselines.camera import convert
                 for r in rows:

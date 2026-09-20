@@ -48,6 +48,10 @@ def dfot(job, torch):
     row = job['input']
     conds, keys = convert(row['pose_path'], row['start_frame'], row['num_frames'],
                           job['model']['intrinsics'], job['model'].get('translation_scale', 100.0))
+    save(Path(job['work']) / 'intrinsics.json', {
+        'status': job['model'].get('intrinsics_status', 'user_supplied'),
+        'normalized': job['model']['intrinsics'],
+        'source': job['model']['intrinsics_source']})
     np.save(Path(job['work']) / 'camera_conditions.npy', conds)
     save(Path(job['work']) / 'frame_map.json', [
         {'output_index': k, 'dataset_index': row['start_frame'] + k,

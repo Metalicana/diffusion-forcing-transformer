@@ -86,6 +86,36 @@ after that window, but does not interrupt an in-progress video or metric job.
 Use `STUDY_PYTHON=/absolute/path/python` if `python3` lacks NumPy. Rerun the same
 command to resume. No GPU work is performed by `--phase preflight`.
 
+## Published-FOV nominal smoke
+
+Appendix B of https://arxiv.org/html/2506.03141v2#A2 specifies 24mm focal length,
+52.67-degree FOV and aperture 10. To test with these published settings before
+per-file calibration is confirmed:
+
+```bash
+export PATH="$HOME/.conda/envs/dfot/bin:$PATH"
+python -m external_baselines.prepare_nominal_smoke --config study.json
+bash external_baselines/run.sh --config study.nominal-smoke.json --gpu 0 --phase smoke
+```
+
+The helper reads all 15 initial PNG dimensions and writes a separate config and
+study root ending `_nominal_smoke`. Checkpoint and metric paths must already be set
+in `study.json`. It requires equal native dimensions for this constant-intrinsics
+adapter. Existing configs are never overwritten.
+
+Assumptions are explicit: horizontal FOV, native image covers the full FOV, square
+native pixels, centered principal point, no distortion. For native width W and
+height H, f=W/(2 tan(52.67deg/2)), K has principal point (W/2,H/2). DFoT samples
+half-pixel centers in image-edge coordinates. Full-image PIL resizing to 256 square
+uses A=diag(256/W,256/H,1), and K_input=A K. Normalized intrinsics therefore remain
+[f/W,f/H,0.5,0.5], not equal focal components when W differs from H.
+
+Config/provenance and per-video `intrinsics.json` record the source, assumptions,
+native sizes, K matrices and resize transform. The explicit nominal status only
+permits preflight/smoke; full evaluation requires reviewing the calibration and
+alignment and preparing the full-study configuration. No retrieval FOV constants
+or hard-coded WorldScore focal lengths are used.
+
 ## FramePack opt-in
 
 The inspected local checkout is **original FramePack**, not F1. It has no numeric

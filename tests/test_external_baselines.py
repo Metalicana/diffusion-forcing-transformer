@@ -5,12 +5,29 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import numpy as np
-from external_baselines.camera import convert
+from external_baselines.camera import convert, nominal_intrinsics
 from external_baselines.common import cohort_identity, generation_input, remap, resumable, identity, save, digest
 from external_baselines.run import collect_bench, run
 
 
 class Contracts(unittest.TestCase):
+    def test_nominal_intrinsics_anisotropic_resize(self):
+        camera = nominal_intrinsics(1920, 1080)
+        fx, fy, cx, cy = camera['normalized']
+        self.assertAlmostEqual(fx, 1.01011919, places=7)
+        self.assertAlmostEqual(fy, fx * 1920 / 1080)
+        self.assertEqual((cx, cy), (.5, .5))
+        native, resized = np.array(camera['K_native']), np.array(camera['K_input'])
+        # Corresponding normalized image locations must describe identical rays.
+        for uv in ([.5, .5], [.1, .9], [.5 / 256, .5 / 256]):
+            a = np.linalg.inv(native) @ [uv[0] * 1920, uv[1] * 1080, 1]
+            b = np.linalg.inv(resized) @ [uv[0] * 256, uv[1] * 256, 1]
+            np.testing.assert_allclose(a, b, atol=1e-12)
+        self.assertEqual(nominal_intrinsics(512, 512)['normalized'][0],
+                         nominal_intrinsics(512, 512)['normalized'][1])
+        with self.assertRaises(ValueError):
+            nominal_intrinsics(0, 1080)
+
     def test_remap_preserves_extras_and_boundaries(self):
         rows = [dict(scene='s', start_frame=7, prompt='/old/a', input_image='/old/a/i.png',
                      pose_path='/older/p.json', extra={'keep': True})]
