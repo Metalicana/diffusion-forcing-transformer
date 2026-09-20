@@ -1061,6 +1061,11 @@ class DFoTVideo(BasePytorchAlgo):
             cond_slice = None
             if conditions is not None:
                 cond_slice = conditions[:, curr_token - c : curr_token - c + cond_len]
+                # A short sequence or final rollout window may not contain a
+                # full noncausal horizon. Match interpolation's edge padding;
+                # _sample_sequence masks and discards the extra output slots.
+                if not self.use_causal_mask:
+                    cond_slice = self._pad_to_max_tokens(cond_slice)
 
             new_pred, record = self._sample_sequence(
                 batch_size,
