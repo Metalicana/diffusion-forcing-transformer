@@ -18,8 +18,9 @@ fi
 DFOT_PYTHON="$DFOT_ENV_PREFIX/bin/python"
 "$DFOT_PYTHON" -c 'import sys; assert sys.version_info[:2] == (3, 10), "Use a dedicated Python 3.10 DFoT environment"'
 "$DFOT_PYTHON" -m pip install --upgrade pip
+"$DFOT_PYTHON" -m pip install -c external_baselines/constraints-dfot.txt setuptools
 "$DFOT_PYTHON" -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
-"$DFOT_PYTHON" -m pip install -r requirements.txt -c external_baselines/constraints-dfot.txt 'imageio[ffmpeg]'
+"$DFOT_PYTHON" -m pip install -r requirements.txt -c external_baselines/constraints-dfot.txt 'imageio[ffmpeg]' setuptools
 "$DFOT_PYTHON" -m pip check
 mkdir -p outputs/dfot_environment
 "$DFOT_PYTHON" -m pip freeze > outputs/dfot_environment/pip-freeze.txt

@@ -22,7 +22,7 @@ def main():
     start = time.monotonic()
     report = {'python': sys.executable, 'python_version': sys.version, 'selected_gpu': args.gpu}
     try:
-        for name in ('torch', 'torchvision', 'lightning', 'hydra', 'transformers',
+        for name in ('pkg_resources', 'torch', 'torchvision', 'lightning', 'hydra', 'transformers',
                      'diffusers', 'imageio', 'algorithms.dfot.dfot_video_pose'):
             print(f'Importing {name} ...', flush=True)
             module = importlib.import_module(name)

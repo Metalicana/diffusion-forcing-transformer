@@ -37,6 +37,18 @@ export PATH="$HOME/.conda/envs/dfot/bin:$PATH"
 
 Only after that passes, configure the manifest-driven generation smoke below.
 
+If an earlier setup fails with `No module named 'pkg_resources'`, repair the
+existing environment and repeat the smoke without reinstalling the model stack:
+
+```bash
+"$HOME/.conda/envs/dfot/bin/python" -m pip install 'setuptools==80.9.0'
+export PATH="$HOME/.conda/envs/dfot/bin:$PATH"
+"$HOME/.conda/envs/dfot/bin/python" -u -m external_baselines.environment_smoke --gpu 0
+```
+
+TorchMetrics 0.11.4 requires this legacy setuptools module. Setup now explicitly
+installs the compatible version; a constraint alone does not install a dependency.
+
 ## Configure once on the cluster
 
 Copy `external_baselines/config.example.json` to your own JSON config. Set:
