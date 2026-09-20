@@ -1,0 +1,22 @@
+{
+  "study_root": "/data/ab575577/MemCam/outputs/external_baselines_180s",
+  "manifest": "/home/ab575577/MemCam/testbeds/context_memory_180s/manifest.jsonl",
+  "dataset_root": "/data/ab575577/Context-as-Memory-Dataset/Context-as-Memory-Dataset",
+  "memcam_repo": "/home/ab575577/MemCam",
+  "vbench_repo": "/home/ab575577/VBench",
+  "metric_python": "/home/ab575577/.conda/envs/memcam/bin/python",
+  "vbench_python": "/home/ab575577/.conda/envs/vbench/bin/python",
+  "fvd_detector": "/REPLACE/with/verified/i3d_torchscript.pt",
+  "seed": 42,
+  "minimum_free_gib": 50,
+  "path_map": {},
+  "models": {
+    "dfot": {
+      "python": "/home/ab575577/.conda/envs/dfot/bin/python",
+      "checkpoint": "/REPLACE/with/DFoT_RE10K.ckpt",
+      "intrinsics": null,
+      "intrinsics_source": null,
+      "translation_scale": 100.0
+    }
+  }
+}
