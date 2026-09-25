@@ -140,8 +140,9 @@ def prepare_features(cases, scorer, output, device):
     for case in cases:
         directory = Path(case["directory"])
         archive = np.load(directory / "observations.npz")
+        history_count = case.get("history_count", 16)
         feature_file, receipt = directory / "history_dino.npy", directory / "history_dino.json"
-        signature = identity([case["observations_sha256"], info])
+        signature = identity([case["observations_sha256"], info, history_count])
         if receipt.exists():
             saved = json.loads(receipt.read_text())
             if saved["signature"] != signature or saved["sha256"] != digest(feature_file):
@@ -151,11 +152,11 @@ def prepare_features(cases, scorer, output, device):
             if encoder is None:
                 print("Loading DINOv2 for observed history features", flush=True)
                 encoder = AutoModel.from_pretrained(info["name"], revision=revision).eval().to(device)
-            pixels = archive["images"][:16]
+            pixels = archive["images"][:history_count]
             images = [Image.fromarray(np.rint(x.transpose(1, 2, 0) * 255).astype(np.uint8)) for x in pixels]
             batches = []
             with torch.inference_mode():
-                for first in range(0, 16, 4):
+                for first in range(0, history_count, 4):
                     inputs = processor(images=images[first:first + 4], return_tensors="pt").to(device)
                     result = encoder(**inputs)
                     pooled = getattr(result, "pooler_output", None)
@@ -167,11 +168,12 @@ def prepare_features(cases, scorer, output, device):
             save(receipt, dict(signature=signature, sha256=digest(feature_file)))
         selections = {}
         for policy in POLICIES:
-            selected, updates = choose_history(policy, archive["conditions"][:16], features, 4, scorer)
+            selected, updates = choose_history(policy, archive["conditions"][:history_count], features, 4, scorer)
             selections[policy] = dict(selected=selected,
                 source_indices=[case["frame_indices"][i] for i in selected], updates=updates)
         freeze(directory / "selection.json", json.loads(json.dumps(selections)))
         print(f"Selected history for {case['scene']}: " + str({k: v['selected'] for k, v in selections.items()}), flush=True)
+        archive.close()
     del encoder
     if device == "cuda":
         torch.cuda.empty_cache()
@@ -180,9 +182,11 @@ def prepare_features(cases, scorer, output, device):
 def predict(model, history_images, history_conditions, target_conditions, selected, seed):
     """The sampling API deliberately has no target-pixels argument."""
     import torch
-    if history_images.shape != (16, 3, 256, 256) or target_conditions.shape != (4, 16):
+    history_count = len(history_images)
+    if (history_count < 4 or history_images.shape != (history_count, 3, 256, 256)
+            or history_conditions.shape != (history_count, 16) or target_conditions.shape != (4, 16)):
         raise ValueError("Invalid history/target camera contract")
-    indices = conditioning_indices(selected, 16, 4, 4)
+    indices = conditioning_indices(selected, history_count, 4, 4)
     device = model.device
     inputs = torch.zeros((1, 8, 3, 256, 256), device=device)
     inputs[0, :4] = torch.as_tensor(history_images[selected], device=device)
@@ -229,14 +233,16 @@ def verify_receipt(directory, name, signature):
     return value
 
 
-def export(output, cases, results, complete):
+def export(output, cases, results, complete, announce=True):
+    if complete and any((case["scene"], p) not in results for case in cases for p in POLICIES):
+        raise ValueError("Cannot export a complete table with missing paired cells")
     rows = []
     for case in cases:
         for policy in POLICIES:
             data = results.get((case["scene"], policy))
             if data is None:
                 continue
-            rows.append(dict(scene=case["scene"], policy=policy, budget=4, observed_history=16,
+            rows.append(dict(scene=case["scene"], policy=policy, budget=4, observed_history=case.get("history_count", 16),
                 predicted_frames=4, **{metric: float(np.mean([r[metric] for r in data]))
                 for metric in ("psnr_db", "ssim", "lpips")}))
     write_csv(output / ("per_video.csv" if complete else "partial_per_video.csv"), rows)
@@ -256,8 +262,9 @@ def export(output, cases, results, complete):
                 differences.append(dict(scene=case["scene"], contrast=f"keepsake_minus_{reference}",
                     **{m: paired["keepsake"][m] - paired[reference][m] for m in ("psnr_db", "ssim", "lpips")}))
         write_csv(output / "paired_differences.csv", differences)
-        for row in summary:
-            print(f"{row['policy']:10s} N={row['videos']} PSNR={row['psnr_db']:.4f} SSIM={row['ssim']:.4f} LPIPS={row['lpips']:.4f}", flush=True)
+        if announce:
+            for row in summary:
+                print(f"{row['policy']:10s} N={row['videos']} PSNR={row['psnr_db']:.4f} SSIM={row['ssim']:.4f} LPIPS={row['lpips']:.4f}", flush=True)
 
 
 def execute(args, status):
@@ -281,6 +288,12 @@ def execute(args, status):
     if args.prepare_only:
         status.update(status="prepared", prepared_cases=len(cases))
         return
+    evaluate_cases(args, status, cfg, cases, config, scorer, scorer_path, code)
+
+
+def evaluate_cases(args, status, cfg, cases, config, scorer, scorer_path, code, exporter=export):
+    """Shared strict-checkpoint evaluation for prespecified observed-history cases."""
+    status["planned_cells"] = len(cases) * len(POLICIES)
     import torch
     print("Checking real CUDA allocation/kernel", flush=True)
     if not torch.cuda.is_available():
@@ -331,10 +344,11 @@ def execute(args, status):
         aggregation="mean four targets per clip, then equal clip means; no inferred CI")
     freeze(args.output / "metrics.json", metric_info)
     results = {}
-    for case in cases:
+    for case_number, case in enumerate(cases, 1):
         directory = Path(case["directory"])
-        sample = np.load(directory / "observations.npz")
-        images, conditions = sample["images"], sample["conditions"]
+        with np.load(directory / "observations.npz") as sample:
+            images, conditions = sample["images"], sample["conditions"]
+        history_count = case.get("history_count", 16)
         selections = json.loads((directory / "selection.json").read_text())
         for policy in POLICIES:
             cell = directory / policy
@@ -346,20 +360,20 @@ def execute(args, status):
             if receipt is None:
                 if time.monotonic() - args.started > args.max_seconds:
                     status.update(status="incomplete", reason="Time budget reached between cells")
-                    export(args.output, cases, results, False)
+                    exporter(args.output, cases, results, False)
                     return
-                print(f"GENERATE [{case['index'] + 1}/{len(cases)}] {case['scene']} {policy} context={selection}", flush=True)
+                print(f"GENERATE [{case_number}/{len(cases)}] {case['scene']} {policy} context={selection}", flush=True)
                 torch.cuda.reset_peak_memory_stats()
                 torch.cuda.synchronize()
                 begin = time.monotonic()
-                prediction = predict(model, images[:16], conditions[:16], conditions[16:], selection,
+                prediction = predict(model, images[:history_count], conditions[:history_count], conditions[history_count:], selection,
                                      args.seed + case["index"])
                 torch.cuda.synchronize()
                 elapsed = time.monotonic() - begin
                 if prediction.shape != (4, 3, 256, 256) or not np.isfinite(prediction).all():
                     raise ValueError("Incomplete prediction")
                 np.save(cell / "prediction.npy", prediction)
-                for name, frames in (("context", images[selection]), ("target_gt", images[16:]), ("predicted", prediction)):
+                for name, frames in (("context", images[selection]), ("target_gt", images[history_count:]), ("predicted", prediction)):
                     for number, frame in enumerate(frames):
                         Image.fromarray(np.rint(frame.transpose(1, 2, 0) * 255).astype(np.uint8)).save(cell / f"{name}_{number}.png")
                 artifacts = {p.name: digest(p) for p in cell.iterdir() if p.suffix in (".png", ".npy")}
@@ -368,20 +382,20 @@ def execute(args, status):
                     selection=selection, source_indices=selections[policy]["source_indices"]))
             metric_receipt = verify_receipt(cell, "quality", signature)
             if metric_receipt is None:
-                frame_rows = quality(np.load(cell / "prediction.npy"), images[16:], metric, "cuda")
+                frame_rows = quality(np.load(cell / "prediction.npy"), images[history_count:], metric, "cuda")
                 write_csv(cell / "frame_metrics.csv", frame_rows)
                 save(cell / "quality.json", dict(signature=signature,
                     artifacts={"frame_metrics.csv": digest(cell / "frame_metrics.csv")}, rows=frame_rows))
             else:
                 frame_rows = metric_receipt["rows"]
             results[case["scene"], policy] = frame_rows
-            export(args.output, cases, results, False)
+            exporter(args.output, cases, results, False)
             save(args.output / "progress.json", dict(completed_cells=len(results), planned_cells=len(cases) * 3,
                 last_scene=case["scene"], last_policy=policy, elapsed_seconds=time.monotonic() - args.started))
             print(f"COMPLETE CELL {len(results)}/{len(cases) * 3}", flush=True)
     if code_identity(scorer_path) != code:
         raise ValueError("Source code changed during the pilot")
-    export(args.output, cases, results, True)
+    exporter(args.output, cases, results, True)
     status.update(status="complete", completed_cells=len(results))
 
 
