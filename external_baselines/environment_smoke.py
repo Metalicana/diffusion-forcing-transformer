@@ -11,16 +11,21 @@ import time
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--gpu', required=True)
+    parser.add_argument('--gpu', default='inherit', help='Keep the scheduler mask by default')
     parser.add_argument('--output', type=Path, default=Path('outputs/dfot_environment/smoke.json'))
     args = parser.parse_args()
     if ',' in args.gpu:
         parser.error('Select one allocated GPU')
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+    if args.gpu != 'inherit':
+        if os.environ.get('SLURM_JOB_ID'):
+            parser.error('Inside Slurm use --gpu inherit; do not replace its GPU mask')
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     os.environ['HF_HUB_OFFLINE'] = '1'
     os.environ['TRANSFORMERS_OFFLINE'] = '1'
     start = time.monotonic()
-    report = {'python': sys.executable, 'python_version': sys.version, 'selected_gpu': args.gpu}
+    report = {'python': sys.executable, 'python_version': sys.version, 'selected_gpu': args.gpu,
+              'cuda_visible_devices': os.environ.get('CUDA_VISIBLE_DEVICES'),
+              'job': os.environ.get('SLURM_JOB_ID')}
     try:
         for name in ('pkg_resources', 'torch', 'torchvision', 'lightning', 'hydra', 'transformers',
                      'diffusers', 'imageio', 'algorithms.dfot.dfot_video_pose'):
